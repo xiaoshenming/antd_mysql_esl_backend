@@ -1629,8 +1629,273 @@ const UpdateForm: React.FC<UpdateFormProps> = (props) => {
 
 
 export default UpdateForm;
+/**
+ * @name 代理的配置
+ * @see 在生产环境 代理是无法生效的，所以这里没有生产环境的配置
+ * -------------------------------
+ * The agent cannot take effect in the production environment
+ * so there is no configuration of the production environment
+ * For details, please see
+ * https://pro.ant.design/docs/deploy
+ *
+ * @doc https://umijs.org/docs/guides/proxy
+ */
+export default {
+  // 如果需要自定义本地开发服务器  请取消注释按需调整
+  // dev: {
+  //   // localhost:8000/api/** -> https://preview.pro.ant.design/api/**
+  //   '/api/': {
+  //     // 要代理的地址
+  //     target: 'https://preview.pro.ant.design',
+  //     // 配置了这个可以从 http 代理到 https
+  //     // 依赖 origin 的功能可能需要这个，比如 cookie
+  //     changeOrigin: true,
+  //   },
+  // },
+  /**
+   * @name 详细的代理配置
+   * @doc https://github.com/chimurai/http-proxy-middleware
+   */
+  test: {
+    // localhost:8000/api/** -> https://preview.pro.ant.design/api/**
+    '/api/': {
+      target: 'https://proapi.azurewebsites.net',
+      changeOrigin: true,
+      pathRewrite: { '^': '' },
+    },
+  },
+  pre: {
+    '/api/': {
+      target: 'your pre url',
+      changeOrigin: true,
+      pathRewrite: { '^': '' },
+    },
+  },
+};
 
 后端的端口为3000。
+PS E:\WebstormProjects\antd_mysql_esl\src>    tree /f /a | findstr /v /i /r /c:"^.*\\.umi.*$"
+? ?? ???? PATH ??
+????? 64A1-2447
+E:.
+|   access.ts
+|   app.tsx
+|   global.less
+|   global.tsx
+|   manifest.json
+|   requestErrorConfig.ts
+|   service-worker.js
+|   typings.d.ts
+|
++---.umi
+|   |   appData.json
+|   |   exports.ts
+|   |   testBrowser.tsx
+|   |   tsconfig.json
+|   |   typings.d.ts
+|   |   umi.ts
+|   |
+|   +---core
+|   |       defineApp.ts
+|   |       EmptyRoute.tsx
+|   |       helmet.ts
+|   |       helmetContext.ts
+|   |       history.ts
+|   |       historyIntelli.ts
+|   |       plugin.ts
+|   |       pluginConfig.ts
+|   |       pluginConfigJoi.d.ts
+|   |       polyfill.ts
+|   |       route.tsx
+|   |       terminal.ts
+|   |
+|   +---plugin-access
+|   |       context.ts
+|   |       index.tsx
+|   |       runtime.tsx
+|   |       types.d.ts
+|   |
+|   +---plugin-antd
+|   |       runtime.tsx
+|   |       runtimeConfig.d.ts
+|   |       types.d.ts
+|   |
+|   +---plugin-initialState
+|   |       @@initialState.ts
+|   |       Provider.tsx
+|   |       runtime.tsx
+|   |       runtimeConfig.d.ts
+|   |
+|   +---plugin-layout
+|   |       Exception.tsx
+|   |       icons.tsx
+|   |       index.ts
+|   |       Layout.css
+|   |       Layout.tsx
+|   |       Logo.tsx
+|   |       rightRender.tsx
+|   |       runtime.tsx
+|   |       runtimeConfig.d.ts
+|   |       types.d.ts
+|   |
+|   +---plugin-locale
+|   |       index.ts
+|   |       locale.tsx
+|   |       localeExports.ts
+|   |       runtime.tsx
+|   |       runtimeConfig.d.ts
+|   |       SelectLang.tsx
+|   |
+|   +---plugin-model
+|   |       index.tsx
+|   |       model.ts
+|   |       runtime.tsx
+|   |
+|   +---plugin-moment2dayjs
+|   |       runtime.tsx
+|   |
+|   +---plugin-openapi
+|   |       openapi.tsx
+|   |
+|   \---plugin-request
+|           index.ts
+|           request.ts
+|           runtimeConfig.d.ts
+|           types.d.ts
+|
++---components
+|   |   index.ts
+|   |
+|   +---Footer
+|   |       index.tsx
+|   |
+|   +---HeaderDropdown
+|   |       index.tsx
+|   |
+|   \---RightContent
+|           AvatarDropdown.tsx
+|           index.tsx
+|
++---locales
+|   |   bn-BD.ts
+|   |   en-US.ts
+|   |   fa-IR.ts
+|   |   id-ID.ts
+|   |   ja-JP.ts
+|   |   pt-BR.ts
+|   |   zh-CN.ts
+|   |   zh-TW.ts
+|   |
+|   +---bn-BD
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---en-US
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---fa-IR
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---id-ID
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---ja-JP
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---pt-BR
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   +---zh-CN
+|   |       component.ts
+|   |       globalHeader.ts
+|   |       menu.ts
+|   |       pages.ts
+|   |       pwa.ts
+|   |       settingDrawer.ts
+|   |       settings.ts
+|   |
+|   \---zh-TW
+|           component.ts
+|           globalHeader.ts
+|           menu.ts
+|           pages.ts
+|           pwa.ts
+|           settingDrawer.ts
+|           settings.ts
+|
++---pages
+|   |   404.tsx
+|   |   Admin.tsx
+|   |   Welcome.tsx
+|   |
+|   +---EslKeyManagement
+|   +---EslKeyScannerInput
+|   +---TableList
+|   |   |   index.tsx
+|   |   |
+|   |   \---components
+|   |           UpdateForm.tsx
+|   |
+|   \---User
+|       \---Login
+|           |   index.tsx
+|           |   login.test.tsx
+|           |
+|           \---__snapshots__
+|                   login.test.tsx.snap
+|
++---services
+|   +---ant-design-pro
+|   |       api.ts
+|   |       index.ts
+|   |       login.ts
+|   |       typings.d.ts
+|   |
+|   +---esl
+|   \---swagger
+|           index.ts
+|           pet.ts
+|           store.ts
+|           typings.d.ts
+|           user.ts
+|
+\---utils
+PS E:\WebstormProjects\antd_mysql_esl\src>
 
 现在也请新增一个专门用来给扫码枪不停的入库的前端界面。
 
