@@ -310,99 +310,379 @@ CREATE TABLE IF NOT EXISTS users (
 
 这是我新写的系统，写出这个专门存电子价签信息的表。
 
-config\db.js
 
 const mysql = require("mysql2/promise");
-
 require("dotenv").config();
-
-
 
 const pool = mysql.createPool({
-
   host: process.env.DB_HOST,
-
   user: process.env.DB_USER,
-
   password: process.env.DB_PASSWORD,
-
   database: process.env.DB_NAME,
-
   waitForConnections: true,
-
   connectionLimit: 10,
-
   queueLimit: 0,
-
 });
-
 module.exports = pool;
 
-app.js
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+// 生成JWT令牌
+const signToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: "1d", // 令牌有效期为1天
+  });
+};
+
+// 注册新用户
+exports.register = async (req, res) => {
+  try {
+    const { username, password, email, role } = req.body;
+
+    // 检查用户是否已存在
+    const existingUser = await User.findByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({
+        status: "error",
+        message: "用户名已存在",
+      });
+    }
+
+    // 创建新用户
+    const newUser = await User.create({
+      username,
+      password,
+      email,
+      role,
+    });
+
+    // 生成JWT令牌
+    const token = signToken(newUser.id);
+
+    res.status(201).json({
+      status: "ok",
+      token,
+      type: "account",
+      currentAuthority: newUser.role,
+      data: {
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
+      },
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "服务器错误，请稍后再试",
+    });
+  }
+};
+
+// 用户登录
+exports.login = async (req, res) => {
+  try {
+    const { username, password, type } = req.body;
+
+    // 检查用户是否存在
+    const user = await User.findByUsername(username);
+    if (!user) {
+      return res.status(401).json({
+        status: "error",
+        type,
+        currentAuthority: "guest",
+        message: "用户名或密码不正确",
+      });
+    }
+
+    // 验证密码
+    const isPasswordCorrect = await User.comparePassword(
+      password,
+      user.password
+    );
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        status: "error",
+        type,
+        currentAuthority: "guest",
+        message: "用户名或密码不正确",
+      });
+    }
+
+    // 生成JWT令牌
+    const token = signToken(user.id);
+
+    res.status(200).json({
+      status: "ok",
+      type,
+      currentAuthority: user.role,
+      token,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "服务器错误，请稍后再试",
+    });
+  }
+};
+
+// 获取当前用户信息
+exports.getCurrentUser = async (req, res) => {
+  try {
+    // 用户信息已在中间件中添加到req对象
+    const user = req.user;
+
+    // 转换为Ant Design Pro需要的格式
+    res.status(200).json({
+      success: true,
+      data: {
+        name: user.username,
+        avatar:
+          "https://gw.alipayobjects.com/zos/antfincdn/XAosXuNZyF/BiazfanxmamNRoxxVxka.png",
+        userid: user.id.toString(),
+        email: user.email,
+        signature: "",
+        title: "",
+        group: "",
+        tags: [],
+        notifyCount: 0,
+        unreadCount: 0,
+        country: "China",
+        access: user.role,
+        address: "",
+        phone: "",
+      },
+    });
+  } catch (error) {
+    console.error("Get current user error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "服务器错误，请稍后再试",
+    });
+  }
+};
+
+// 退出登录
+exports.logout = (req, res) => {
+  res.status(200).json({
+    data: {},
+    success: true,
+  });
+};
+
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+exports.protect = async (req, res, next) => {
+  let token;
+
+  // 从请求头获取token
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      status: "error",
+      message: "未授权访问，请先登录",
+    });
+  }
+
+  try {
+    // 验证token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(decoded);// 打印出解码后的token信息
+
+    // 获取用户信息
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return res.status(401).json({
+        status: "error",
+        message: "此令牌的用户不存在",
+      });
+    }
+
+    // 将用户信息添加到请求对象
+    req.user = currentUser;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      status: "error",
+      message: "令牌无效或已过期",
+    });
+  }
+};
+
+// 角色授权中间件
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        status: "error",
+        message: "您没有权限执行此操作",
+      });
+    }
+    next();
+  };
+};
+
+
+const db = require("../config/db");
+const bcrypt = require("bcryptjs");
+
+class User {
+  static async findByUsername(username) {
+    try {
+      const [rows] = await db.execute(
+        "SELECT * FROM users WHERE username = ?",
+        [username]
+      );
+      return rows[0];
+    } catch (error) {
+      console.error("找不到用户:", error);
+      throw error;
+    }
+  }
+
+  static async findById(id) {
+    try {
+      const [rows] = await db.execute(
+        "SELECT id, username, email, role, created_at FROM users WHERE id = ?",
+        [id]
+      );
+      return rows[0];
+    } catch (error) {
+      console.error("无法通过ID找到用户:", error);
+      throw error;
+    }
+  }
+
+  static async create(userData) {
+    const { username, password, email, role = "user" } = userData;
+
+    // 密码加密
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    try {
+      const [result] = await db.execute(
+        "INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)",
+        [username, hashedPassword, email, role]
+      );
+
+      return { id: result.insertId, username, email, role };
+    } catch (error) {
+      console.error("创建用户时出现错误:", error);
+      throw error;
+    }
+  }
+
+  static async comparePassword(password, hashedPassword) {
+    return await bcrypt.compare(password, hashedPassword);
+  }
+}
+
+module.exports = User;
 
 const express = require("express");
+const authController = require("../controllers/authController");
+const authMiddleware = require("../middleware/authMiddleware");
 
+const router = express.Router();
+
+// 公开路由
+router.post("/api/register", authController.register);
+router.post("/api/login", authController.login);
+router.post("/api/logout", authController.logout);
+
+// 受保护路由
+router.get(
+  "/api/currentUser",
+  authMiddleware.protect,
+  authController.getCurrentUser
+);
+
+// 管理员路由示例
+router.get(
+  "/api/admin/users",
+  authMiddleware.protect,
+  authMiddleware.restrictTo("admin"),
+  (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: "只有管理员可以访问此路由",
+    });
+  }
+);
+
+module.exports = router;
+
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=MO520MING
+DB_NAME=antd_auth_db
+JWT_SECRET=your_jwt_secret_key
+PORT=3000
+
+
+const express = require("express");
 const cors = require("cors");
-
 require("dotenv").config();
-
-
 
 const authRoutes = require("./routes/authRoutes");
 
-
-
 const app = express();
 
-
-
 // 中间件
-
 app.use(cors());
-
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
 
-
-
 // 路由
-
 app.use("/", authRoutes);
 
-
-
 // 错误处理
-
 app.use((err, req, res, next) => {
-
   console.error(err.stack);
-
   res.status(500).json({
-
     status: "error",
-
     message: "服务器内部错误",
-
   });
-
 });
-
-
 
 // 启动服务器
-
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-
   console.log(`服务器运行在端口 ${PORT}`);
-
 });
 
-models\esl.js
+    目录: E:\计算机类\Node.js\chap2\backend_mysql_esl
 
-空
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         2025/5/11     21:25                config
+d-----         2025/5/12      0:38                controllers
+d-----         2025/5/11     21:26                middleware
+d-----         2025/5/12      0:38                models
+d-----         2025/5/11     21:24                node_modules
+d-----         2025/5/12      0:38                routes
+-a----         2025/5/11     21:25            119 .env
+-a----         2025/5/11     21:44             14 .gitignore
+-a----         2025/5/12      0:38            655 app.js
+-a----         2025/5/11     21:28          39608 package-lock.json
+-a----         2025/5/11     21:46            461 package.json
+-a----         2025/5/12      0:40          47555 README.md
+
+
+PS E:\计算机类\Node.js\chap2\backend_mysql_esl> 
+
 
 就是写一个电子价签的增删改查的接口，以及你觉得可能需要的接口。
 
@@ -1899,5 +2179,5 @@ PS E:\WebstormProjects\antd_mysql_esl\src>
 
 现在也请新增一个专门用来给扫码枪不停的入库的前端界面。
 
-发挥你的想象力。写出你认为最完美的代码。说中文。
+发挥你的想象力。写出你认为最完美的代码。说中文。（不用写国际化）
 
