@@ -10,7 +10,7 @@ class User {
       );
       return rows[0];
     } catch (error) {
-      console.error("Error finding user:", error);
+      console.error("找不到用户:", error);
       throw error;
     }
   }
@@ -23,7 +23,7 @@ class User {
       );
       return rows[0];
     } catch (error) {
-      console.error("Error finding user by ID:", error);
+      console.error("无法通过ID找到用户:", error);
       throw error;
     }
   }
@@ -43,7 +43,7 @@ class User {
 
       return { id: result.insertId, username, email, role };
     } catch (error) {
-      console.error("Error creating user:", error);
+      console.error("创建用户时出现错误:", error);
       throw error;
     }
   }

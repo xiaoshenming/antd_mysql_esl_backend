@@ -22,6 +22,7 @@ exports.protect = async (req, res, next) => {
   try {
     // 验证token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(decoded);// 打印出解码后的token信息
 
     // 获取用户信息
     const currentUser = await User.findById(decoded.id);
