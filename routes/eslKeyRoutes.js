@@ -4,41 +4,46 @@ const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// スキャン入力用ルート (ログインユーザーなら誰でもアクセス可能)
+// スキャン入力 (ログインユーザーなら誰でもアクセス可能: admin, user)
 router.post(
   "/scan",
-  authMiddleware.protect, // このルートを保護
+  authMiddleware.protect, // ログイン必須
   eslKeyController.scanAndCreateEslKey
 );
 
-// --- 管理者向けCRUDルート ---
-// 作成 (管理者のみ)
+// 作成 (ログインユーザーなら誰でもアクセス可能: admin, user)
 router.post(
   "/",
-  authMiddleware.protect,
-  authMiddleware.restrictTo("admin"),
+  authMiddleware.protect, // ログイン必須
   eslKeyController.createEslKey
 );
 
-// 一覧取得 (ログインユーザーなら誰でも)
-router.get("/", authMiddleware.protect, eslKeyController.getEslKeys);
+// 一覧取得 (ログインユーザーなら誰でもアクセス可能: admin, user)
+router.get(
+  "/",
+  authMiddleware.protect, // ログイン必須
+  eslKeyController.getEslKeys
+);
 
-// IDで取得 (ログインユーザーなら誰でも)
-router.get("/:id", authMiddleware.protect, eslKeyController.getEslKeyById);
+// IDで取得 (ログインユーザーなら誰でもアクセス可能: admin, user)
+router.get(
+  "/:id",
+  authMiddleware.protect, // ログイン必須
+  eslKeyController.getEslKeyById
+);
 
-// 更新 (管理者のみ)
+// 更新 (ログインユーザーなら誰でもアクセス可能: admin, user)
 router.put(
   "/:id",
-  authMiddleware.protect,
-  authMiddleware.restrictTo("admin"),
+  authMiddleware.protect, // ログイン必須
   eslKeyController.updateEslKey
 );
 
-// 削除 (管理者のみ)
+// 削除 (管理者(admin)のみアクセス可能)
 router.delete(
   "/:id",
   authMiddleware.protect,
-  authMiddleware.restrictTo("admin"),
+  authMiddleware.restrictTo("admin"), // 管理者ロールのみ許可
   eslKeyController.deleteEslKey
 );
 
