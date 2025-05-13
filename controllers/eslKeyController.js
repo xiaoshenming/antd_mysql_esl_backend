@@ -1,12 +1,13 @@
 const EslKey = require("../models/EslKey");
 
-// スキャン入力用API (クイック追加)
+// 扫描录入 API (快速添加)
 exports.scanAndCreateEslKey = async (req, res) => {
   try {
-    const { hardware_id, secret_key } = req.body;
+    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
     const userId = req.user.id;
     const username = req.user.username;
 
+    // box_id 不是必填项，但 hardware_id 和 secret_key 是
     if (!hardware_id || !secret_key) {
       return res.status(400).json({
         status: "error",
@@ -26,6 +27,7 @@ exports.scanAndCreateEslKey = async (req, res) => {
     const newEslKey = await EslKey.create({
       hardware_id,
       secret_key,
+      box_id: box_id || null, // 如果box_id未提供或为空，则存为null
       userId,
       username,
     });
@@ -37,7 +39,11 @@ exports.scanAndCreateEslKey = async (req, res) => {
     });
   } catch (error) {
     console.error("扫描录入ESL密钥时出错:", error);
-    if (error.code === "ER_DUP_ENTRY") {
+    if (
+      error.code === "ER_DUP_ENTRY" ||
+      (error.message && error.message.includes("ER_DUP_ENTRY"))
+    ) {
+      // 更可靠的重复条目检查
       return res.status(409).json({
         status: "error",
         message: `此硬件编号 (${req.body.hardware_id}) 已存在 (ER_DUP_ENTRY)`,
@@ -50,14 +56,15 @@ exports.scanAndCreateEslKey = async (req, res) => {
   }
 };
 
-// 管理者用: ESLキー作成
+// (管理用) 创建 ESL Key
 exports.createEslKey = async (req, res) => {
   try {
-    const { hardware_id, secret_key } = req.body;
+    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
     const userId = req.user.id;
     const username = req.user.username;
 
     if (!hardware_id || !secret_key) {
+      // box_id 可选
       return res.status(400).json({
         status: "error",
         message: "硬件编号和密钥不能为空",
@@ -75,6 +82,7 @@ exports.createEslKey = async (req, res) => {
     const newEslKey = await EslKey.create({
       hardware_id,
       secret_key,
+      box_id: box_id || null,
       userId,
       username,
     });
@@ -85,7 +93,10 @@ exports.createEslKey = async (req, res) => {
     });
   } catch (error) {
     console.error("创建ESL密钥时出错:", error);
-    if (error.code === "ER_DUP_ENTRY") {
+    if (
+      error.code === "ER_DUP_ENTRY" ||
+      (error.message && error.message.includes("ER_DUP_ENTRY"))
+    ) {
       return res.status(409).json({
         status: "error",
         message: `此硬件编号 (${req.body.hardware_id}) 已存在 (ER_DUP_ENTRY)`,
@@ -98,16 +109,25 @@ exports.createEslKey = async (req, res) => {
   }
 };
 
-// ESLキー一覧取得 (ページネーション、検索対応)
+// 获取 ESL Key 列表 (分页、搜索)
 exports.getEslKeys = async (req, res) => {
   try {
-    const { page, limit, searchHardwareId, searchSecretKey, sortBy, order } =
-      req.query;
+    // 从 req.query 中获取 searchBoxId
+    const {
+      page,
+      limit,
+      searchHardwareId,
+      searchSecretKey,
+      searchBoxId,
+      sortBy,
+      order,
+    } = req.query;
     const result = await EslKey.getAll({
       page,
       limit,
       searchHardwareId,
       searchSecretKey,
+      searchBoxId, // 传递 searchBoxId
       sortBy,
       order,
     });
@@ -125,7 +145,7 @@ exports.getEslKeys = async (req, res) => {
   }
 };
 
-// IDによるESLキー取得
+// 通过 ID 获取 ESL Key
 exports.getEslKeyById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -149,55 +169,51 @@ exports.getEslKeyById = async (req, res) => {
   }
 };
 
-// ESLキー更新
+// 更新 ESL Key
 exports.updateEslKey = async (req, res) => {
   try {
     const { id } = req.params;
-    const { hardware_id, secret_key } = req.body;
+    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
 
     if (Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "请求体不能为空",
-      });
+      return res
+        .status(400)
+        .json({ status: "error", message: "请求体不能为空" });
     }
-    // 空文字チェックも追加 (undefined や null だけでなく)
-    if (hardware_id === "" || secret_key === "") {
-      return res.status(400).json({
-        status: "error",
-        message: "硬件编号和密钥不能为空字符串",
-      });
-    }
+    // 检查是否所有提供的字段都是空字符串（如果这是不允许的）
+    // 允许部分更新，所以不在此处强制所有字段都非空
+    // if (hardware_id === "" || secret_key === "") { // box_id 可以为空
+    //   return res.status(400).json({ status: "error", message: "硬件编号和密钥不能为空字符串" });
+    // }
 
     const currentEslKey = await EslKey.findById(id);
     if (!currentEslKey) {
-      return res.status(404).json({
-        status: "error",
-        message: "未找到要更新的电子价签信息",
-      });
+      return res
+        .status(404)
+        .json({ status: "error", message: "未找到要更新的电子价签信息" });
     }
 
-    const updatedEslKey = await EslKey.update(id, {
+    // 准备更新数据，如果字段未提供，则使用当前值 (但对于 box_id，如果提供空字符串，模型层会转为null)
+    const dataToUpdate = {
       hardware_id:
         hardware_id !== undefined ? hardware_id : currentEslKey.hardware_id,
       secret_key:
         secret_key !== undefined ? secret_key : currentEslKey.secret_key,
-    });
+      box_id: box_id !== undefined ? box_id : currentEslKey.box_id,
+    };
+
+    const updatedEslKey = await EslKey.update(id, dataToUpdate);
 
     if (!updatedEslKey) {
-      // updateメソッドがnullを返す場合 (e.g., afectedRows 0 and no other error)
-      return res.status(404).json({
-        // Or 304 Not Modified if no changes were made but ID exists
-        status: "error",
-        message: "更新失败或没有字段被实际更新",
-      });
+      return res
+        .status(404)
+        .json({ status: "error", message: "更新失败或没有字段被实际更新" });
     }
     if (updatedEslKey.affectedRows === 0 && updatedEslKey.message) {
-      // Modelで独自メッセージを返した場合
-      return res.status(400).json({
-        status: "info",
-        message: updatedEslKey.message,
-      });
+      // model 返回的自定义消息
+      return res
+        .status(400)
+        .json({ status: "info", message: updatedEslKey.message });
     }
 
     res.status(200).json({
@@ -208,36 +224,25 @@ exports.updateEslKey = async (req, res) => {
   } catch (error) {
     console.error("更新ESL密钥时出错:", error);
     if (error.statusCode === 409) {
-      // Modelで設定したカスタムエラーコード
       return res.status(409).json({ status: "error", message: error.message });
     }
-    res.status(500).json({
-      status: "error",
-      message: "服务器错误",
-    });
+    res.status(500).json({ status: "error", message: "服务器错误" });
   }
 };
 
-// ESLキー削除
+// 删除 ESL Key
 exports.deleteEslKey = async (req, res) => {
   try {
     const { id } = req.params;
     const success = await EslKey.delete(id);
     if (!success) {
-      return res.status(404).json({
-        status: "error",
-        message: "未找到要删除的电子价签信息",
-      });
+      return res
+        .status(404)
+        .json({ status: "error", message: "未找到要删除的电子价签信息" });
     }
-    res.status(200).json({
-      status: "ok",
-      message: "电子价签信息删除成功",
-    });
+    res.status(200).json({ status: "ok", message: "电子价签信息删除成功" });
   } catch (error) {
     console.error("删除ESL密钥时出错:", error);
-    res.status(500).json({
-      status: "error",
-      message: "服务器错误",
-    });
+    res.status(500).json({ status: "error", message: "服务器错误" });
   }
 };
