@@ -1,17 +1,32 @@
 const EslKey = require("../models/EslKey");
 
+// Helper function to validate 12-digit hexadecimal ID
+const isValidHardwareIdFormat = (id) => {
+  if (typeof id !== "string") return false;
+  const hexRegex = /^[0-9a-fA-F]{12}$/;
+  return hexRegex.test(id);
+};
+
 // 扫描录入 API (快速添加)
 exports.scanAndCreateEslKey = async (req, res) => {
   try {
-    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
+    const { hardware_id, secret_key, box_id } = req.body;
     const userId = req.user.id;
     const username = req.user.username;
 
-    // box_id 不是必填项，但 hardware_id 和 secret_key 是
     if (!hardware_id || !secret_key) {
       return res.status(400).json({
         status: "error",
         message: "硬件编号 (hardware_id) 和密钥 (secret_key) 不能为空",
+      });
+    }
+
+    // Validate hardware_id format
+    if (!isValidHardwareIdFormat(hardware_id)) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "硬件编号 (hardware_id) 必须是12位十六进制字符 (例如: 1A2B3C4D5E6F)",
       });
     }
 
@@ -27,7 +42,7 @@ exports.scanAndCreateEslKey = async (req, res) => {
     const newEslKey = await EslKey.create({
       hardware_id,
       secret_key,
-      box_id: box_id || null, // 如果box_id未提供或为空，则存为null
+      box_id: box_id || null,
       userId,
       username,
     });
@@ -35,7 +50,7 @@ exports.scanAndCreateEslKey = async (req, res) => {
     res.status(201).json({
       status: "ok",
       message: "电子价签信息录入成功",
-      data: newEslKey,
+      data: newEslKey, // This already includes the DB-generated ID and other fields
     });
   } catch (error) {
     console.error("扫描录入ESL密钥时出错:", error);
@@ -43,7 +58,6 @@ exports.scanAndCreateEslKey = async (req, res) => {
       error.code === "ER_DUP_ENTRY" ||
       (error.message && error.message.includes("ER_DUP_ENTRY"))
     ) {
-      // 更可靠的重复条目检查
       return res.status(409).json({
         status: "error",
         message: `此硬件编号 (${req.body.hardware_id}) 已存在 (ER_DUP_ENTRY)`,
@@ -59,15 +73,23 @@ exports.scanAndCreateEslKey = async (req, res) => {
 // (管理用) 创建 ESL Key
 exports.createEslKey = async (req, res) => {
   try {
-    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
+    const { hardware_id, secret_key, box_id } = req.body;
     const userId = req.user.id;
     const username = req.user.username;
 
     if (!hardware_id || !secret_key) {
-      // box_id 可选
       return res.status(400).json({
         status: "error",
         message: "硬件编号和密钥不能为空",
+      });
+    }
+
+    // Validate hardware_id format
+    if (!isValidHardwareIdFormat(hardware_id)) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "硬件编号 (hardware_id) 必须是12位十六进制字符 (例如: 1A2B3C4D5E6F)",
       });
     }
 
@@ -89,7 +111,7 @@ exports.createEslKey = async (req, res) => {
     res.status(201).json({
       status: "ok",
       message: "电子价签信息创建成功",
-      data: newEslKey,
+      data: newEslKey, // This already includes the DB-generated ID and other fields
     });
   } catch (error) {
     console.error("创建ESL密钥时出错:", error);
@@ -173,18 +195,22 @@ exports.getEslKeyById = async (req, res) => {
 exports.updateEslKey = async (req, res) => {
   try {
     const { id } = req.params;
-    const { hardware_id, secret_key, box_id } = req.body; // 获取 box_id
+    const { hardware_id, secret_key, box_id } = req.body;
 
     if (Object.keys(req.body).length === 0) {
       return res
         .status(400)
         .json({ status: "error", message: "请求体不能为空" });
     }
-    // 检查是否所有提供的字段都是空字符串（如果这是不允许的）
-    // 允许部分更新，所以不在此处强制所有字段都非空
-    // if (hardware_id === "" || secret_key === "") { // box_id 可以为空
-    //   return res.status(400).json({ status: "error", message: "硬件编号和密钥不能为空字符串" });
-    // }
+
+    // If hardware_id is being updated, validate its format
+    if (hardware_id !== undefined && !isValidHardwareIdFormat(hardware_id)) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "硬件编号 (hardware_id) 必须是12位十六进制字符 (例如: 1A2B3C4D5E6F)",
+      });
+    }
 
     const currentEslKey = await EslKey.findById(id);
     if (!currentEslKey) {
@@ -193,7 +219,6 @@ exports.updateEslKey = async (req, res) => {
         .json({ status: "error", message: "未找到要更新的电子价签信息" });
     }
 
-    // 准备更新数据，如果字段未提供，则使用当前值 (但对于 box_id，如果提供空字符串，模型层会转为null)
     const dataToUpdate = {
       hardware_id:
         hardware_id !== undefined ? hardware_id : currentEslKey.hardware_id,
@@ -210,21 +235,35 @@ exports.updateEslKey = async (req, res) => {
         .json({ status: "error", message: "更新失败或没有字段被实际更新" });
     }
     if (updatedEslKey.affectedRows === 0 && updatedEslKey.message) {
-      // model 返回的自定义消息
       return res
         .status(400)
         .json({ status: "info", message: updatedEslKey.message });
     }
 
+    // It's good practice to return the updated entity or at least the ID.
+    // If EslKey.update doesn't return the full entity, fetch it again.
+    // For now, assuming updatedEslKey contains enough info or the frontend refetches.
+    const freshUpdatedKey = await EslKey.findById(id); // Fetch the updated record to return it
+
     res.status(200).json({
       status: "ok",
       message: "电子价签信息更新成功",
-      data: updatedEslKey,
+      data: freshUpdatedKey, // Return the full updated record
     });
   } catch (error) {
     console.error("更新ESL密钥时出错:", error);
-    if (error.statusCode === 409) {
-      return res.status(409).json({ status: "error", message: error.message });
+    if (
+      error.statusCode === 409 ||
+      (error.message && error.message.includes("ER_DUP_ENTRY")) ||
+      (error.code && error.code.includes("ER_DUP_ENTRY"))
+    ) {
+      // More robust duplicate check
+      return res
+        .status(409)
+        .json({
+          status: "error",
+          message: error.message || `硬件编号 (${req.body.hardware_id}) 已存在`,
+        });
     }
     res.status(500).json({ status: "error", message: "服务器错误" });
   }
